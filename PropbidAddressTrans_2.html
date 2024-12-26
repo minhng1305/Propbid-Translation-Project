@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLAW3255 Address translation demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .result-item {
+            margin: 10px 0;
+        }
+        .error-message {
+            color: #ff0000;
+            background-color: #ffe6e6;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        .loading {
+            display: none;
+            color: #666;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>LLAW3255 Address translation demo</h1>
+    
+    <div class="input-group">
+        <label for="address">Enter Address:</label><br>
+        <input type="text" id="address" name="address">
+        <button onclick="translateAddress()">Translate</button>
+    </div>
+
+    <div id="loading" class="loading">
+        Translating address...
+    </div>
+
+    <div id="error-container" class="error-message"></div>
+
+    <div class="results">
+        <h2>Translation Results:</h2>
+        <div class="result-item">
+            <strong>English:</strong> <span id="englishResult"></span>
+        </div>
+        <div class="result-item">
+            <strong>Traditional Chinese:</strong> <span id="traditionalResult"></span>
+        </div>
+        <div class="result-item">
+            <strong>Simplified Chinese:</strong> <span id="simplifiedResult"></span>
+        </div>
+    </div>
+
+    <!-- Load config file first -->
+    <script src="config.js"></script>
+
+    <script>
+        const geocodingApiKey = config.geocodingApiKey;
+        const translationApiKey = config.translationApiKey;
+
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.textContent = message;
+            errorContainer.style.display = 'block';
+        }
+
+        function clearError() {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.style.display = 'none';
+            errorContainer.textContent = '';
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        async function geocodeAddress(address, language) {
+            try {
+                const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&language=${language}&key=${geocodingApiKey}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status === "REQUEST_DENIED") {
+                    throw new Error(`Geocoding API error: ${data.error_message || 'Invalid API key or API key not authorized'}`);
+                }
+
+                if (data.status === "OVER_QUERY_LIMIT") {
+                    throw new Error("Geocoding API quota exceeded. Please try again later.");
+                }
+
+                if (data.status === "ZERO_RESULTS") {
+                    throw new Error("No results found for the provided address.");
+                }
+
+                if (data.status !== "OK") {
+                    throw new Error(`Geocoding failed: ${data.error_message || data.status}`);
+                }
+
+                return data.results[0].formatted_address;
+            } catch (error) {
+                if (error.message.includes('Failed to fetch')) {
+                    throw new Error("Network error: Unable to connect to Geocoding API");
+                }
+                throw error;
+            }
+        }
+
+        async function translateText(text, targetLanguage) {
+            try {
+                const url = `https://translation.googleapis.com/language/translate/v2?key=${translationApiKey}`;
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        q: text,
+                        target: targetLanguage,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Translation API error: ${errorData.error?.message || 'Unknown error'}`);
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(`Translation failed: ${data.error.message || 'Unknown error'}`);
+                }
+
+                return data.data.translations[0].translatedText;
+            } catch (error) {
+                if (error.message.includes('Failed to fetch')) {
+                    throw new Error("Network error: Unable to connect to Translation API");
+                }
+                throw error;
+            }
+        }
+
+        async function translateAddress() {
+            const address = document.getElementById('address').value.trim();
+            
+            if (!address) {
+                showError("Please enter an address");
+                return;
+            }
+
+            clearError();
+            showLoading(true);
+
+            try {
+                // Clear previous results
+                document.getElementById('englishResult').textContent = '';
+                document.getElementById('traditionalResult').textContent = '';
+                document.getElementById('simplifiedResult').textContent = '';
+
+                // Detect language (basic detection)
+                const isChineseInput = /[\u4e00-\u9fa5]/.test(address);
+
+                if (isChineseInput) {
+                    // Chinese input handling
+                    try {
+                        const englishAddress = await geocodeAddress(address, 'en');
+                        document.getElementById('englishResult').textContent = englishAddress;
+                    } catch (error) {
+                        showError(`English translation error: ${error.message}`);
+                    }
+
+                    try {
+                        const traditionalAddress = await translateText(address, 'zh-TW');
+                        document.getElementById('traditionalResult').textContent = traditionalAddress;
+                    } catch (error) {
+                        showError(`Traditional Chinese translation error: ${error.message}`);
+                    }
+
+                    try {
+                        const simplifiedAddress = await translateText(address, 'zh-CN');
+                        document.getElementById('simplifiedResult').textContent = simplifiedAddress;
+                    } catch (error) {
+                        showError(`Simplified Chinese translation error: ${error.message}`);
+                    }
+                } else {
+                    // English input handling
+                    document.getElementById('englishResult').textContent = address;
+
+                    try {
+                        const chineseAddress = await geocodeAddress(address, 'zh');
+                        document.getElementById('traditionalResult').textContent = chineseAddress;
+                        
+                        const simplifiedAddress = await translateText(chineseAddress, 'zh-CN');
+                        document.getElementById('simplifiedResult').textContent = simplifiedAddress;
+                    } catch (error) {
+                        showError(`Chinese translation error: ${error.message}`);
+                    }
+                }
+            } catch (error) {
+                showError(`Translation process failed: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+    </script>
+</body>
+</html>
