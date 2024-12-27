@@ -1,4 +1,4 @@
 const config = {
-    geocodingApiKey: "Put the API here",
-    translationApiKey: "Put the API here"
+    geocodingApiKey: "AIzaSyAq8CYJNFeoBglF9x5dM2Tyxpzqz0mERdA",
+    translationApiKey: "AIzaSyAP5ivfRcTof6Qa0aFlyxUZSPCxgktEepE"
 };

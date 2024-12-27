@@ -25,6 +25,7 @@
             color: white;
             border: none;
             cursor: pointer;
+            margin-top: 10px;
         }
         button:hover {
             background-color: #45a049;
@@ -34,6 +35,9 @@
         }
         .result-item {
             margin: 10px 0;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
         }
         .error-message {
             color: #ff0000;
@@ -48,14 +52,38 @@
             color: #666;
             margin: 10px 0;
         }
+        .input-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
-    <h1>LLAW3255 Address translation demo</h1>
+    <h1>LLAW3255 Address translation</h1>
     
-    <div class="input-group">
+
+    <!-- <div class="input-group">
         <label for="address">Enter Address:</label><br>
         <input type="text" id="address" name="address">
+        <button onclick="translateAddress()">Translate</button>
+    </div> -->
+ 
+
+    <div class="input-group">
+        <div class="input-container">
+            <div>
+                <label for="mainAddress">Enter the main address (region, street, building):</label><br>
+                <input type="text" id="mainAddress" name="mainAddress" 
+                       placeholder="e.g., Chi Fu Fa Yuen, Pok Fu Lam, Hong Kong">
+            </div>
+            
+            <div>
+                <label for="unitAddress">Enter floor and unit information (optional):</label><br>
+                <input type="text" id="unitAddress" name="unitAddress" 
+                       placeholder="e.g., Flat A, 13/F">
+            </div>
+        </div>
         <button onclick="translateAddress()">Translate</button>
     </div>
 
@@ -79,7 +107,7 @@
     </div>
 
     <!-- Load config file first -->
-    <script src="config.js"></script>
+    <script src="./config.js"></script>
 
     <script>
         const geocodingApiKey = config.geocodingApiKey;
@@ -133,6 +161,7 @@
         }
 
         async function translateText(text, targetLanguage) {
+            if (!text) return '';
             try {
                 const url = `https://translation.googleapis.com/language/translate/v2?key=${translationApiKey}`;
                 const response = await fetch(url, {
@@ -165,10 +194,11 @@
         }
 
         async function translateAddress() {
-            const address = document.getElementById('address').value.trim();
+            const mainAddress = document.getElementById('mainAddress').value.trim();
+            const unitAddress = document.getElementById('unitAddress').value.trim();
             
-            if (!address) {
-                showError("Please enter an address");
+            if (!mainAddress) {
+                showError("Please enter at least the main address");
                 return;
             }
 
@@ -181,45 +211,65 @@
                 document.getElementById('traditionalResult').textContent = '';
                 document.getElementById('simplifiedResult').textContent = '';
 
+                let mainAddressResults = {};
+                let unitAddressResults = {};
+
                 // Detect language (basic detection)
-                const isChineseInput = /[\u4e00-\u9fa5]/.test(address);
+                const isChineseInput = /[\u4e00-\u9fa5]/.test(mainAddress);
 
                 if (isChineseInput) {
                     // Chinese input handling
                     try {
-                        const englishAddress = await geocodeAddress(address, 'en');
-                        document.getElementById('englishResult').textContent = englishAddress;
+                        mainAddressResults.en = await geocodeAddress(mainAddress, 'en');
                     } catch (error) {
-                        showError(`English translation error: ${error.message}`);
+                        showError(`Main Address Geocode Error: ${error.message}`);
                     }
 
                     try {
-                        const traditionalAddress = await translateText(address, 'zh-TW');
-                        document.getElementById('traditionalResult').textContent = traditionalAddress;
+                        mainAddressResults.zhTW = await translateText(mainAddress, 'zh-TW');
+                        mainAddressResults.zhCN = await translateText(mainAddress, 'zh-CN');
                     } catch (error) {
-                        showError(`Traditional Chinese translation error: ${error.message}`);
+                        showError(`Main Address Translation Error: ${error.message}`);
                     }
 
-                    try {
-                        const simplifiedAddress = await translateText(address, 'zh-CN');
-                        document.getElementById('simplifiedResult').textContent = simplifiedAddress;
-                    } catch (error) {
-                        showError(`Simplified Chinese translation error: ${error.message}`);
+                    try{
+                        if (unitAddress) {
+                            unitAddressResults.en = await translateText(unitAddress, 'en');
+                            unitAddressResults.zhTW = await translateText(unitAddress, 'zh-TW');
+                            unitAddressResults.zhCN = await translateText(unitAddress, 'zh-CN');
+                        }
+                    } catch (error) {                      
+                        showError(`Unit Address Translation Error: ${error.message}`);
                     }
                 } else {
-                    // English input handling
-                    document.getElementById('englishResult').textContent = address;
-
-                    try {
-                        const chineseAddress = await geocodeAddress(address, 'zh');
-                        document.getElementById('traditionalResult').textContent = chineseAddress;
-                        
-                        const simplifiedAddress = await translateText(chineseAddress, 'zh-CN');
-                        document.getElementById('simplifiedResult').textContent = simplifiedAddress;
-                    } catch (error) {
-                        showError(`Chinese translation error: ${error.message}`);
+                        mainAddressResults.en = mainAddress;
+                        try {
+                            mainAddressResults.zhTW = await geocodeAddress(mainAddress, 'zh');
+                            //mainAddressResults.zhTW = await translateText(mainAddressResults.zhTW, 'zh-TW');
+                        } catch (error) {
+                            showError(`Main Address Geocode Error: ${error.message}`);
+                        }
+                        try {
+                            mainAddressResults.zhCN = await translateText(mainAddressResults.zhTW, 'zh-CN');
+                        } catch (error) {
+                            showError(`Main Address Translation Error: ${error.message}`);
+                        }
+                        try{
+                            if (unitAddress) {
+                                unitAddressResults.en = unitAddress;
+                                unitAddressResults.zhTW = await translateText(unitAddress, 'zh-TW');
+                                unitAddressResults.zhCN = await translateText(unitAddress, 'zh-CN');
+                            }
+                        } catch (error) {
+                            showError(`Unit Address Translation Error: ${error.message}`);
+                        }
                     }
-                }
+                document.getElementById('englishResult').textContent = 
+                    `${unitAddressResults.en ? unitAddressResults.en + ', ' : ''}${mainAddressResults.en}`;
+                document.getElementById('traditionalResult').textContent = 
+                    `${mainAddressResults.zhTW}${unitAddressResults.zhTW ? ' '+unitAddressResults.zhTW: ''}`;
+                document.getElementById('simplifiedResult').textContent = 
+                    `${mainAddressResults.zhCN}${unitAddressResults.zhCN ? ' '+unitAddressResults.zhCN: ''}`;
             } catch (error) {
                 showError(`Translation process failed: ${error.message}`);
             } finally {

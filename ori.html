@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLAW3255 Address translation demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 600px;
+        }
+        input{ 
+            font-size: 1em;
+            padding: 10px;
+            margin: 10px 0;
+            width: 150%;
+        }
+        button {
+            font-size: 1em;
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%;
+        }
+        .output {
+            background: #f9f9f9;
+            padding: 10px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>LLAW3255 Address translation demo</h1>
+    <form id="address-form">
+        <label for="address">Enter Address:</label>
+        <input type="text" id="address" name="address" 
+               placeholder="e.g., Flat B, Lower Floor, Tower 2, Villa Tiara, No. 9 Tuen Hing Road, Tuen Mun or 屯門屯興路9號怡峰園2座低層B室" required>
+        <button type="submit">Translate</button>
+    </form>
+    <div class="output" id="output" style="display: none;">
+        <h2>Translation Results:</h2>
+        <p><strong>English:</strong> <span id="english"></span></p>
+        <p><strong>Traditional Chinese:</strong> <span id="traditional"></span></p>
+        <p><strong>Simplified Chinese:</strong> <span id="simplified"></span></p>
+    </div>
+    <script>
+        const geocodingApiKey = "Your Geocoding API keu"; // Replace with Geocoding API key
+        const translationApiKey = "Your Translation API key"; // Replace with Translation API key
+
+        // Detect if the input is Chinese or English
+        function detectLanguage(input) {
+            const hasChinese = /[\u4e00-\u9fa5]/.test(input);
+            return hasChinese ? 'zh' : 'en';
+        }
+
+        // Geocode the address with language parameter
+        async function geocodeAddress(address, language) {
+            try {
+                const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&language=${language}&key=${geocodingApiKey}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status !== "OK") {
+                    throw new Error(data.error_message || `Geocoding failed with status: ${data.status}`);
+
+                }
+
+                return data.results[0].formatted_address;
+            } catch (error) {
+                console.error("Geocoding Error:", error.message);
+                throw new Error("Geocoding API failed.");
+            }
+        }
+
+        // Translate text using Google Translate API
+        async function translateText(text, targetLanguage) {
+            try {
+                const url = `https://translation.googleapis.com/language/translate/v2?key=${translationApiKey}`;
+
+                
+
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        q: text,
+                        target: targetLanguage,
+                    }),
+                });
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    throw new Error(data.error.message || "Translation failed");
+                }
+
+                return data.data.translations[0].translatedText;
+            } catch (error) {
+                console.error("Translation Error:", error.message);
+                throw new Error("Translation API failed.");
+            }
+        }
+
+        document.getElementById("address-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const address = document.getElementById("address").value;
+
+    try {
+        // Step 1: Detect the language of the input (English or Chinese)
+        const language = detectLanguage(address);
+
+        let englishAddress = "";
+        let traditionalAddress = "";
+        let simplifiedAddress = "";
+
+        if (language === 'en') {
+            // English Input
+            const geocodedChineseAddress = await geocodeAddress(address, 'zh'); // Geocode to Simplified Chinese
+            englishAddress = address; // Original input as English
+            simplifiedAddress = await translateText(geocodedChineseAddress, "zh-cn"); // Simplified Chinese from Geocoding API
+            traditionalAddress = geocodedChineseAddress; // Translate to Traditional Chinese
+        } else if (language === 'zh') {
+            // Traditional Chinese Input
+            const geocodedEnglishAddress = await geocodeAddress(address, 'en'); // Geocode to English
+            englishAddress = geocodedEnglishAddress; // English from Geocoding API
+            traditionalAddress = await translateText(address, "zh-tw"); // Translate to Traditional Chinese
+            simplifiedAddress = await translateText(address, "zh-cn"); // Translate to Simplified Chinese
+            // Since it's not accurate to detect traditional chinese or simplified chinese, 2 translaitons are completed to ensure correct translation
+        } 
+
+        // Step 2: Display the results
+        document.getElementById("english").textContent = englishAddress;
+        document.getElementById("traditional").textContent = traditionalAddress;
+        document.getElementById("simplified").textContent = simplifiedAddress;
+        document.getElementById("output").style.display = "block";
+    } catch (error) {
+        alert("Error: " + error.message);
+    }
+});
+    </script>
+</body>
+</html>
